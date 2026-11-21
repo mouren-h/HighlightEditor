@@ -1,11 +1,15 @@
-package mr.x.widget;
+package com.junnian.widget;
 
 import android.content.Context;
-import android.content.res.TypedArray;
 import android.graphics.Typeface;
 import android.util.AttributeSet;
 
 import java.io.File;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+
+import tiiehenry.code.Lexer;
+import tiiehenry.code.language.Language;
 
 import tiiehenry.code.view.CodeEditor;
 import tiiehenry.code.view.ColorScheme;
@@ -15,9 +19,8 @@ import tiiehenry.code.view.listener.OnRowChangedListener;
 import tiiehenry.code.view.listener.OnSelectionChangedListener;
 
 /**
- * glbjk.jar CodeEditor 的 XML/Java 封装。
- *
- * XML 属性统一使用 editor 前缀，避免与 Android 系统属性冲突。
+ * 对 glbjk.jar 中 CodeEditor 的简单封装。
+ * 用户端直接把 HighlightEditor 当作普通 Android View 添加即可。
  */
 public class HighlightEditor extends CodeEditor {
 
@@ -35,22 +38,20 @@ public class HighlightEditor extends CodeEditor {
 
     public HighlightEditor(Context context) {
         super(context);
-        initDefaults();
+        initEditor();
     }
 
     public HighlightEditor(Context context, AttributeSet attrs) {
         super(context, attrs);
-        initDefaults();
-        readAttributes(context, attrs);
+        initEditor();
     }
 
     public HighlightEditor(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initDefaults();
-        readAttributes(context, attrs);
+        initEditor();
     }
 
-    private void initDefaults() {
+    private void initEditor() {
         setWordWrap(false);
         setShowLineNumbers(true);
         setAutoIndent(true);
@@ -60,233 +61,200 @@ public class HighlightEditor extends CodeEditor {
         setColorScheme(new ColorSchemeLight());
     }
 
-    private void readAttributes(Context context, AttributeSet attrs) {
-        if (attrs == null) return;
-
-        TypedArray a = context.obtainStyledAttributes(
-                attrs, R.styleable.HighlightEditor
-        );
-
-        try {
-            String language = a.getString(
-                    R.styleable.HighlightEditor_editorLanguage
-            );
-            if (language != null && language.length() > 0) {
-                setCodeLanguage(language);
-            }
-
-            setWordWrap(a.getBoolean(
-                    R.styleable.HighlightEditor_editorWordWrap, false));
-
-            setShowLineNumbers(a.getBoolean(
-                    R.styleable.HighlightEditor_editorShowLineNumbers, true));
-
-            setAutoIndent(a.getBoolean(
-                    R.styleable.HighlightEditor_editorAutoIndent, true));
-
-            setAutoComplete(a.getBoolean(
-                    R.styleable.HighlightEditor_editorAutoComplete, true));
-
-            setTabSpaces(a.getInt(
-                    R.styleable.HighlightEditor_editorTabSpaces, 4));
-
-            setAutoIndentWidth(a.getInt(
-                    R.styleable.HighlightEditor_editorAutoIndentWidth, 1));
-
-            setHighlightCurrentRow(a.getBoolean(
-                    R.styleable.HighlightEditor_editorHighlightCurrentRow, false));
-
-            setNonPrintingCharVisibility(a.getBoolean(
-                    R.styleable.HighlightEditor_editorNonPrintingCharVisibility, false));
-
-            setLongPressCaps(a.getBoolean(
-                    R.styleable.HighlightEditor_editorLongPressCaps, false));
-
-            setZoom(a.getFloat(
-                    R.styleable.HighlightEditor_editorZoom, 1.0f));
-
-            setChirality(a.getBoolean(
-                    R.styleable.HighlightEditor_editorChirality, false));
-
-            // glbjk.jar 的 caretWidth 是公开字段，不提供 setter。
-            caretWidth = a.getDimensionPixelSize(
-                    R.styleable.HighlightEditor_editorCaretWidth, caretWidth);
-
-            // isShowRegion 同样是原库公开字段。
-            isShowRegion = a.getBoolean(
-                    R.styleable.HighlightEditor_editorShowRegion, isShowRegion);
-
-            // 原库 setTextSize(int) 接收像素值；dimension 会把 XML 的 sp/dp 转成 px。
-            if (a.hasValue(R.styleable.HighlightEditor_editorTextSize)) {
-                setTextSize(a.getDimensionPixelSize(
-                        R.styleable.HighlightEditor_editorTextSize, 14));
-            }
-
-            int typefaceRes = a.getResourceId(
-                    R.styleable.HighlightEditor_editorTypeface, 0);
-            if (typefaceRes != 0) {
-                setTypeface(context.getResources().getFont(typefaceRes));
-            }
-
-            int boldTypefaceRes = a.getResourceId(
-                    R.styleable.HighlightEditor_editorBoldTypeface, 0);
-            if (boldTypefaceRes != 0) {
-                setBoldTypeface(context.getResources().getFont(boldTypefaceRes));
-            }
-
-            int italicTypefaceRes = a.getResourceId(
-                    R.styleable.HighlightEditor_editorItalicTypeface, 0);
-            if (italicTypefaceRes != 0) {
-                setItalicTypeface(context.getResources().getFont(italicTypefaceRes));
-            }
-        } finally {
-            a.recycle();
-        }
-    }
-
+    /** 设置代码内容。 */
     public HighlightEditor setCode(CharSequence code) {
         setText(code == null ? "" : code);
         return this;
     }
 
+    /** 获取完整代码。 */
     public String getCode() {
         return getString();
     }
 
+    /** 设置语法高亮语言，参数使用 LANG_* 常量。 */
     public HighlightEditor setCodeLanguage(String language) {
-        if (language != null) {
-            setlanguage(language.toLowerCase(java.util.Locale.ROOT));
-            respan();
-        }
+        if (language == null) return this;
+
+        // 原版 CodeEditor.setlanguage() 使用字符串引用比较（==），
+        // 因此必须传入 intern 后的标准字符串，避免动态字符串无法匹配语言。
+        String normalized = language.trim().toLowerCase(Locale.ROOT).intern();
+        setlanguage(normalized);
+        respan();
         return this;
     }
 
+    /** 在指定字符偏移处插入文本。 */
     public HighlightEditor insertText(int index, String text) {
         insert(index, text == null ? "" : text);
         return this;
     }
 
+    /** 替换指定范围的文本，end 为结束位置（不包含）。 */
     public HighlightEditor replaceRange(int start, int end, String text) {
         replaceText(start, end, text == null ? "" : text);
         return this;
     }
 
+    /** 跳转到指定行，行号从 1 开始。 */
     public HighlightEditor goToLine(int line) {
         gotoLine(line);
         return this;
     }
 
+    /** 设置光标位置。 */
     public HighlightEditor setCursor(int position) {
         setSelection(position);
         return this;
     }
 
+    /** 设置选区。 */
     public HighlightEditor selectRange(int start, int end) {
         setSelection(start, end);
         return this;
     }
 
+    /** 全选代码。 */
     public HighlightEditor selectAllCode() {
         selectAll();
         return this;
     }
 
+    /** 开启/关闭行号。 */
     public HighlightEditor showLineNumbers(boolean show) {
         setShowLineNumbers(show);
         return this;
     }
 
+    /** 开启/关闭自动补全。 */
     public HighlightEditor autoComplete(boolean enabled) {
         setAutoComplete(enabled);
         return this;
     }
 
+    /** 开启/关闭自动缩进。 */
     public HighlightEditor autoIndent(boolean enabled) {
         setAutoIndent(enabled);
         return this;
     }
 
+    /** 设置 Tab 对应的空格数。 */
     public HighlightEditor setIndentSpaces(int spaces) {
-        setTabSpaces(Math.max(0, spaces));
+        setTabSpaces(Math.max(1, spaces));
         return this;
     }
 
+    /** 设置是否自动换行。 */
     public HighlightEditor wordWrap(boolean enabled) {
         setWordWrap(enabled);
         return this;
     }
 
-    /** 参数为像素值；XML 的 editorTextSize 可直接使用 sp。 */
-    public HighlightEditor setEditorTextSize(int sizePx) {
-        setTextSize(sizePx);
+    /** 设置文字大小，单位为 sp。 */
+    public HighlightEditor setEditorTextSize(int sizeSp) {
+        setTextSize(sizeSp);
         return this;
     }
 
+    /** 设置普通字体。 */
     public HighlightEditor setEditorTypeface(Typeface typeface) {
         if (typeface != null) setTypeface(typeface);
         return this;
     }
 
+    /** 设置粗体字体。 */
     public HighlightEditor setEditorBoldTypeface(Typeface typeface) {
-        if (typeface != null) setBoldTypeface(typeface);
+        setBoldTypeface(typeface);
         return this;
     }
 
+    /** 设置斜体字体。 */
     public HighlightEditor setEditorItalicTypeface(Typeface typeface) {
-        if (typeface != null) setItalicTypeface(typeface);
+        setItalicTypeface(typeface);
         return this;
     }
 
+    /** 从字体文件加载字体（具体格式由 Android Typeface 支持情况决定）。 */
     public HighlightEditor loadFont(File fontFile) {
         if (fontFile != null && fontFile.exists()) initFont(fontFile);
         return this;
     }
 
+    /** 设置语法配色方案。 */
     public HighlightEditor setEditorColorScheme(ColorScheme scheme) {
         if (scheme != null) setColorScheme(scheme);
         return this;
     }
 
+    /** 添加代码补全候选词。 */
     public HighlightEditor addCompletionNames(String... names) {
-        if (names != null) addNames(names);
+        if (names == null || names.length == 0) return this;
+
+        // 原版 addNames() 直接对 Language.getNames() 的结果取 length，
+        // 但原版 JavaLanguage 等语言的 names 初始值可能为 null，导致 NPE。
+        Language language = Lexer.getLanguage();
+        if (language == null) return this;
+
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        String[] oldNames = language.getNames();
+        if (oldNames != null) {
+            for (String name : oldNames) {
+                if (name != null && !name.isEmpty()) merged.add(name);
+            }
+        }
+        for (String name : names) {
+            if (name != null && !name.isEmpty()) merged.add(name);
+        }
+
+        language.setNames(merged.toArray(new String[0]));
+        respan();
+        invalidate();
         return this;
     }
 
+    /** 撤销。 */
     public HighlightEditor undoCode() {
         undo();
         return this;
     }
 
+    /** 重做。 */
     public HighlightEditor redoCode() {
         redo();
         return this;
     }
 
+    /** 复制当前选区。 */
     public HighlightEditor copyCode() {
         copy();
         return this;
     }
 
+    /** 剪切当前选区。 */
     public HighlightEditor cutCode() {
         cut();
         return this;
     }
 
+    /** 粘贴剪贴板内容。 */
     public HighlightEditor pasteCode() {
         paste();
         return this;
     }
 
+    /** 监听选区变化。 */
     public HighlightEditor onSelectionChanged(OnSelectionChangedListener listener) {
         setOnSelectionChangedListener(listener);
         return this;
     }
 
+    /** 监听光标所在行变化。 */
     public HighlightEditor onRowChanged(OnRowChangedListener listener) {
         setRowListener(listener);
         return this;
     }
 
+    /** 监听键盘快捷键。 */
     public HighlightEditor onKeyShortcut(OnKeyShortcutListener listener) {
         setOnKeyShortcutListener(listener);
         return this;

@@ -81,14 +81,14 @@ dependencyResolutionManagement {
 **Groovy**
 ```gradle
 dependencies {
-    implementation 'com.github.mouren-h:HighlightEditor:1.0'
+    implementation 'com.github.mouren-h:HighlightEditor:1.5'
 }
 ```
 
 **Kotlin DSL**
 ```kotlin
 dependencies {
-    implementation("com.github.mouren-h:HighlightEditor:1.0")
+    implementation("com.github.mouren-h:HighlightEditor:1.5")
 }
 ```
 

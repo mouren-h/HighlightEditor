@@ -1,4 +1,4 @@
-package com.junnian.widget;
+package mr.x.widget;
 
 import android.content.Context;
 import android.graphics.Typeface;

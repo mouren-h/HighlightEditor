@@ -10,7 +10,17 @@ import java.util.Locale;
 
 import tiiehenry.code.Lexer;
 import tiiehenry.code.language.Language;
-
+import tiiehenry.code.language.c.CLanguage;
+import tiiehenry.code.language.cpp.CppLanguage;
+import tiiehenry.code.language.csharp.CSharpLanguage;
+import tiiehenry.code.language.java.JavaLanguage;
+import tiiehenry.code.language.javascript.JavaScriptLanguage;
+import tiiehenry.code.language.lua.LuaLanguage;
+import tiiehenry.code.language.objectivec.ObjectiveCLanguage;
+import tiiehenry.code.language.php.PHPLanguage;
+import tiiehenry.code.language.python.PythonLanguage;
+import tiiehenry.code.language.ruby.RubyLanguage;
+import tiiehenry.code.language.xml.XMLLanguage;
 import tiiehenry.code.view.CodeEditor;
 import tiiehenry.code.view.ColorScheme;
 import tiiehenry.code.view.ColorSchemeLight;
@@ -19,8 +29,8 @@ import tiiehenry.code.view.listener.OnRowChangedListener;
 import tiiehenry.code.view.listener.OnSelectionChangedListener;
 
 /**
- * 对 glbjk.jar 中 CodeEditor 的简单封装。
- * 用户端直接把 HighlightEditor 当作普通 Android View 添加即可。
+ * glbjk.jar 的 Android 代码编辑器封装。
+ * 用户端可以将 HighlightEditor 直接作为普通 Android View 使用。
  */
 public class HighlightEditor extends CodeEditor {
 
@@ -51,52 +61,103 @@ public class HighlightEditor extends CodeEditor {
         initEditor();
     }
 
+    /** 初始化编辑器默认属性。 */
     private void initEditor() {
-        setWordWrap(false);
-        setShowLineNumbers(true);
-        setAutoIndent(true);
-        setAutoComplete(true);
-        setTabSpaces(4);
-        setTextSize(14);
-        setColorScheme(new ColorSchemeLight());
+        setWordWrap(false);                 // 默认关闭自动换行
+        setShowLineNumbers(true);           // 默认显示行号
+        setAutoIndent(true);                // 默认开启自动缩进
+        setAutoComplete(true);              // 默认开启自动补全
+        setTabSpaces(4);                    // Tab 默认对应 4 个空格
+        setTextSize(14);                    // 默认代码字体大小，单位 px
+        setColorScheme(new ColorSchemeLight()); // 默认使用浅色配色方案
     }
 
-    /** 设置代码内容。 */
+    /** 设置编辑器代码内容。 */
     public HighlightEditor setCode(CharSequence code) {
         setText(code == null ? "" : code);
         return this;
     }
 
-    /** 获取完整代码。 */
+    /** 获取编辑器中的完整代码。 */
     public String getCode() {
         return getString();
     }
 
-    /** 设置语法高亮语言，参数使用 LANG_* 常量。 */
+    /**
+     * 设置代码语言。
+     * 重要：必须调用父类的 setLanguage(Language)，它会同时设置 Lexer
+     * 和 AutoCompletePanel；不能只调用 setlanguage(String)，后者只设置 Lexer。
+     */
     public HighlightEditor setCodeLanguage(String language) {
-        if (language == null) return this;
+        if (language == null) {
+            return this;
+        }
 
-        // 原版 CodeEditor.setlanguage() 使用字符串引用比较（==），
-        // 因此必须传入 intern 后的标准字符串，避免动态字符串无法匹配语言。
-        String normalized = language.trim().toLowerCase(Locale.ROOT).intern();
-        setlanguage(normalized);
+        String normalized = language.trim().toLowerCase(Locale.ROOT);
+        Language selected;
+
+        switch (normalized) {
+            case "java":
+                selected = JavaLanguage.getInstance();
+                break;
+            case "js":
+            case "javascript":
+                selected = JavaScriptLanguage.getInstance();
+                break;
+            case "python":
+                selected = PythonLanguage.getInstance();
+                break;
+            case "xml":
+                selected = XMLLanguage.getInstance();
+                break;
+            case "c":
+                selected = CLanguage.getInstance();
+                break;
+            case "cpp":
+            case "c++":
+                selected = CppLanguage.getInstance();
+                break;
+            case "csharp":
+            case "c#":
+                selected = CSharpLanguage.getInstance();
+                break;
+            case "php":
+                selected = PHPLanguage.getInstance();
+                break;
+            case "lua":
+                selected = LuaLanguage.getInstance();
+                break;
+            case "ruby":
+                selected = RubyLanguage.getInstance();
+                break;
+            case "objectivec":
+            case "objective-c":
+                selected = ObjectiveCLanguage.getInstance();
+                break;
+            default:
+                return this;
+        }
+
+        // 关键修复：同时同步语法高亮 Lexer 与自动补全 AutoCompletePanel。
+        setLanguage(selected);
         respan();
+        invalidate();
         return this;
     }
 
-    /** 在指定字符偏移处插入文本。 */
+    /** 在指定字符位置插入文本。 */
     public HighlightEditor insertText(int index, String text) {
         insert(index, text == null ? "" : text);
         return this;
     }
 
-    /** 替换指定范围的文本，end 为结束位置（不包含）。 */
+    /** 替换指定范围的文本，end 不包含在替换范围内。 */
     public HighlightEditor replaceRange(int start, int end, String text) {
         replaceText(start, end, text == null ? "" : text);
         return this;
     }
 
-    /** 跳转到指定行，行号从 1 开始。 */
+    /** 跳转到指定行，具体行号规则遵循原版 gotoLine()。 */
     public HighlightEditor goToLine(int line) {
         gotoLine(line);
         return this;
@@ -108,7 +169,7 @@ public class HighlightEditor extends CodeEditor {
         return this;
     }
 
-    /** 设置选区。 */
+    /** 设置文本选区。 */
     public HighlightEditor selectRange(int start, int end) {
         setSelection(start, end);
         return this;
@@ -120,19 +181,19 @@ public class HighlightEditor extends CodeEditor {
         return this;
     }
 
-    /** 开启/关闭行号。 */
+    /** 显示或隐藏行号。 */
     public HighlightEditor showLineNumbers(boolean show) {
         setShowLineNumbers(show);
         return this;
     }
 
-    /** 开启/关闭自动补全。 */
+    /** 开启或关闭自动补全。 */
     public HighlightEditor autoComplete(boolean enabled) {
         setAutoComplete(enabled);
         return this;
     }
 
-    /** 开启/关闭自动缩进。 */
+    /** 开启或关闭自动缩进。 */
     public HighlightEditor autoIndent(boolean enabled) {
         setAutoIndent(enabled);
         return this;
@@ -150,60 +211,108 @@ public class HighlightEditor extends CodeEditor {
         return this;
     }
 
-    /** 设置文字大小，单位为 sp。 */
-    public HighlightEditor setEditorTextSize(int sizeSp) {
-        setTextSize(sizeSp);
+    /** 设置代码字体大小，原版 setTextSize(int) 使用 px。 */
+    public HighlightEditor setEditorTextSize(int sizePx) {
+        setTextSize(sizePx);
         return this;
     }
 
-    /** 设置普通字体。 */
+    /** 设置编辑器缩放比例，范围由原版控件限制。 */
+    public HighlightEditor setEditorZoom(float zoom) {
+        setZoom(zoom);
+        return this;
+    }
+
+    /** 获取当前编辑器缩放比例。 */
+    public float getEditorZoom() {
+        return getZoom();
+    }
+
+    /** 设置普通代码字体。 */
     public HighlightEditor setEditorTypeface(Typeface typeface) {
-        if (typeface != null) setTypeface(typeface);
+        if (typeface != null) {
+            setTypeface(typeface);
+        }
         return this;
     }
 
-    /** 设置粗体字体。 */
+    /** 设置粗体代码字体。 */
     public HighlightEditor setEditorBoldTypeface(Typeface typeface) {
-        setBoldTypeface(typeface);
+        if (typeface != null) {
+            setBoldTypeface(typeface);
+        }
         return this;
     }
 
-    /** 设置斜体字体。 */
+    /** 设置斜体代码字体。 */
     public HighlightEditor setEditorItalicTypeface(Typeface typeface) {
-        setItalicTypeface(typeface);
+        if (typeface != null) {
+            setItalicTypeface(typeface);
+        }
         return this;
     }
 
-    /** 从字体文件加载字体（具体格式由 Android Typeface 支持情况决定）。 */
+    /** 从字体文件加载字体。 */
     public HighlightEditor loadFont(File fontFile) {
-        if (fontFile != null && fontFile.exists()) initFont(fontFile);
+        if (fontFile != null && fontFile.exists() && fontFile.isFile()) {
+            initFont(fontFile);
+        }
         return this;
     }
 
-    /** 设置语法配色方案。 */
+    /** 设置语法高亮配色方案。 */
     public HighlightEditor setEditorColorScheme(ColorScheme scheme) {
-        if (scheme != null) setColorScheme(scheme);
+        if (scheme != null) {
+            setColorScheme(scheme);
+            invalidate();
+        }
         return this;
     }
 
-    /** 添加代码补全候选词。 */
-    public HighlightEditor addCompletionNames(String... names) {
-        if (names == null || names.length == 0) return this;
+    /** 设置编辑器背景颜色。 */
+    public HighlightEditor setEditorBackgroundColor(int color) {
+        getColorScheme().setColor(ColorScheme.Colorable.BACKGROUND, color);
+        invalidate();
+        return this;
+    }
 
-        // 原版 addNames() 直接对 Language.getNames() 的结果取 length，
-        // 但原版 JavaLanguage 等语言的 names 初始值可能为 null，导致 NPE。
+    /** 设置普通代码文字颜色。 */
+    public HighlightEditor setEditorForegroundColor(int color) {
+        getColorScheme().setColor(ColorScheme.Colorable.FOREGROUND, color);
+        invalidate();
+        return this;
+    }
+
+    /**
+     * 添加代码补全候选词。
+     * 不能调用原版 addNames()，因为原版直接读取 names.length，names 为 null 时会崩溃。
+     * 这里先合并旧候选词，再写回当前语言对象。
+     */
+    public HighlightEditor addCompletionNames(String... names) {
+        if (names == null || names.length == 0) {
+            return this;
+        }
+
         Language language = Lexer.getLanguage();
-        if (language == null) return this;
+        if (language == null) {
+            return this;
+        }
 
         LinkedHashSet<String> merged = new LinkedHashSet<>();
         String[] oldNames = language.getNames();
+
         if (oldNames != null) {
             for (String name : oldNames) {
-                if (name != null && !name.isEmpty()) merged.add(name);
+                if (name != null && !name.trim().isEmpty()) {
+                    merged.add(name);
+                }
             }
         }
+
         for (String name : names) {
-            if (name != null && !name.isEmpty()) merged.add(name);
+            if (name != null && !name.trim().isEmpty()) {
+                merged.add(name);
+            }
         }
 
         language.setNames(merged.toArray(new String[0]));
@@ -212,13 +321,13 @@ public class HighlightEditor extends CodeEditor {
         return this;
     }
 
-    /** 撤销。 */
+    /** 撤销上一次编辑。 */
     public HighlightEditor undoCode() {
         undo();
         return this;
     }
 
-    /** 重做。 */
+    /** 重做上一次撤销。 */
     public HighlightEditor redoCode() {
         redo();
         return this;
@@ -242,7 +351,7 @@ public class HighlightEditor extends CodeEditor {
         return this;
     }
 
-    /** 监听选区变化。 */
+    /** 监听文本选区变化。 */
     public HighlightEditor onSelectionChanged(OnSelectionChangedListener listener) {
         setOnSelectionChangedListener(listener);
         return this;
